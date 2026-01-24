@@ -1,4 +1,7 @@
 import pytest
+from fastapi.testclient import TestClient
+
+from src.api import app
 from src.engine import Coordinate, HaversineEngine
 
 def test_distance_between_same_points():
@@ -22,16 +25,40 @@ def test_invalid_latitude():
 def test_unit_conversion():
     """Verifies if the conversion to meters is operating correctly."""
     p1 = Coordinate(0, 0)
-    p2 = Coordinate(0, 1) # ~111km na linha do equador
+    p2 = Coordinate(0, 1)
     dist_km = HaversineEngine.calculate_distance(p1, p2, unit="KM")
     dist_m = HaversineEngine.calculate_distance(p1, p2, unit="M")
     assert dist_m == dist_km * 1000
 
 def test_geofencing_trigger():
-    """Testa se o alarme de proximidade ativa corretamente."""
+    """Check if the active proximity alarm is working correctly."""
     base = Coordinate(-15.7942, -47.8822) # Brasília
-    alvo_perto = Coordinate(-15.8000, -47.8900) # Muito próximo
+    alvo_perto = Coordinate(-15.8000, -47.8900) # Very close
     alvo_longe = Coordinate(-23.5505, -46.6333) # SP
     
     assert HaversineEngine.is_within_radius(base, alvo_perto, radius=5.0) is True
     assert HaversineEngine.is_within_radius(base, alvo_longe, radius=5.0) is False
+
+client = TestClient(app)
+def test_api_calculate_success():
+    """Validates the main endpoint with valid data."""
+    payload = {
+        "origin": {"lat": -15.7942, "lon": -47.8822},
+        "target": {"lat": -23.5505, "lon": -46.6333},
+        "radius": 10.0
+    }
+    response = client.post("/calculate", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["data"]["distance_km"] > 800
+    assert data["data"]["alert"] is False
+
+def test_api_invalid_data():
+    """Ensures that the API blocks impossible coordinates (Business Rule)."""
+    payload = {
+        "origin": {"lat": 100.0, "lon": 0.0},
+        "target": {"lat": 0.0, "lon": 0.0}
+    }
+    response = client.post("/calculate", json=payload)
+    assert response.status_code == 400
