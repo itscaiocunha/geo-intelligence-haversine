@@ -1,42 +1,81 @@
 import os
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from src.engine import Coordinate, HaversineEngine
-from fastapi import FastAPI, HTTPException, Security, Depends
-from fastapi.security.api_key import APIKeyHeader
+import secrets
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
+# Immediate loading of environment variables
 load_dotenv()
 
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security.api_key import APIKeyHeader
+from pydantic import BaseModel
+from src.engine import Coordinate, HaversineEngine, logger
+
+# Security Settings
 API_KEY_NAME = "X-API-KEY"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-# Authorized keys
-AUTHORIZED_KEYS = {
-    os.getenv("API_KEY_OPERATOR"): "OPERATOR",
-    os.getenv("API_KEY_COMMAND"): "COMMAND"
-}
+# Initialization of In-Memory Database
+command_key = os.getenv("API_KEY_COMMAND")
+api_keys_db = {}
 
+if command_key:
+    api_keys_db[command_key] = {"role": "COMMAND", "created_at": "static"}
+else:
+    print("CRITICAL: API_KEY_COMMAND not found in environment!")
+
+# Security Dependency Function
 async def get_api_key(api_key: str = Depends(api_key_header)):
-    if api_key in AUTHORIZED_KEYS:
-        return AUTHORIZED_KEYS[api_key]
+    if not api_key:
+        raise HTTPException(status_code=403, detail="Access Denied: Missing Credentials")
+
+    if api_key in api_keys_db:
+        return api_keys_db[api_key]["role"]
+    
     raise HTTPException(status_code=403, detail="Access Denied: Invalid Credentials")
 
 app = FastAPI(title="Tactical Geo-Int API", version="1.0.0")
 
-# Data Schema (Pydantic) for automatic JSON validation
+# --- SCHEMAS ---
+class KeyGenerationRequest(BaseModel):
+    role: str = "OPERATOR"
+    expires_in_days: int = 30
+
 class GeoRequest(BaseModel):
     origin: dict
     target: dict
     radius: float = 5.0
 
+# --- ROUTES ---
+@app.post("/admin/generate-key")
+async def generate_new_key(
+    request: KeyGenerationRequest, 
+    admin_role: str = Depends(get_api_key)
+):
+    if admin_role != "COMMAND":
+        raise HTTPException(status_code=403, detail="Insufficient permissions.")
+
+    new_key = f"geo_{secrets.token_urlsafe(32)}"
+    api_keys_db[new_key] = {
+        "role": request.role,
+        "created_at": datetime.now().isoformat(),
+        "expires_at": (datetime.now() + timedelta(days=request.expires_in_days)).isoformat()
+    }
+    
+    logger.info(f"New key generated for level {request.role}")
+    return {
+        "status": "key_generated",
+        "api_key": new_key,
+        "role": request.role,
+        "expires_at": api_keys_db[new_key]["expires_at"]
+    }
+
 @app.post("/calculate")
 async def calculate_tactical_distance(
     request: GeoRequest,
-    role: str = Depends(get_api_key) # Security dependency injection
-    ):
+    role: str = Depends(get_api_key)
+):
     try:
-        # Conversion of the received JSON
         origin_coord = Coordinate(request.origin['lat'], request.origin['lon'])
         target_coord = Coordinate(request.target['lat'], request.target['lon'])
         
@@ -46,7 +85,6 @@ async def calculate_tactical_distance(
         return {
             "status": "success",
             "role_access": role,
-            "code": 200,
             "data": {
                 "distance_km": round(distance, 2),
                 "alert": within,
@@ -54,6 +92,7 @@ async def calculate_tactical_distance(
             }
         }
     except Exception as e:
+        logger.error(f"API Error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/health")
