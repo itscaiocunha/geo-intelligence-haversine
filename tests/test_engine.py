@@ -1,8 +1,22 @@
+import os
 import pytest
-from fastapi.testclient import TestClient
 
+from fastapi.testclient import TestClient
 from src.api import app
 from src.engine import Coordinate, HaversineEngine
+from dotenv import load_dotenv
+
+load_dotenv()
+client = TestClient(app)
+
+VALID_API_KEY = os.getenv("API_KEY_OPERATOR")
+HEADERS = {"X-API-KEY": VALID_API_KEY}
+
+# Authorized keys
+AUTHORIZED_KEYS = {
+    os.getenv("API_KEY_OPERATOR"): "OPERATOR",
+    os.getenv("API_KEY_COMMAND"): "COMMAND"
+}
 
 def test_distance_between_same_points():
     """It ensures that the distance to the same point is zero."""
@@ -47,7 +61,7 @@ def test_api_calculate_success():
         "target": {"lat": -23.5505, "lon": -46.6333},
         "radius": 10.0
     }
-    response = client.post("/calculate", json=payload)
+    response = client.post("/calculate", json=payload, headers=HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
@@ -60,5 +74,46 @@ def test_api_invalid_data():
         "origin": {"lat": 100.0, "lon": 0.0},
         "target": {"lat": 0.0, "lon": 0.0}
     }
-    response = client.post("/calculate", json=payload)
+    response = client.post("/calculate", json=payload, headers=HEADERS)
     assert response.status_code == 400
+
+def test_api_calculate_success_with_auth():
+    """Valida o cálculo quando as credenciais estão corretas."""
+    payload = {
+        "origin": {"lat": -15.7942, "lon": -47.8822},
+        "target": {"lat": -23.5505, "lon": -46.6333},
+        "radius": 10.0
+    }
+    # Injeção tática do Header de segurança
+    response = client.post("/calculate", json=payload, headers=HEADERS)
+    
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["role_access"] == "OPERATOR"
+
+def test_api_unauthorized_access():
+    """Garante que o acesso sem chave ou com chave errada seja bloqueado (403)."""
+    payload = {"origin": {"lat": 0, "lon": 0}, "target": {"lat": 1, "lon": 1}}
+    
+    # Tentativa de invasão sem Header
+    response = client.post("/calculate", json=payload)
+    assert response.status_code == 403
+    
+    # Tentativa com chave corrompida
+    bad_headers = {"X-API-KEY": "wrong-key-123"}
+    response = client.post("/calculate", json=payload, headers=bad_headers)
+    assert response.status_code == 403
+
+def test_command_level_access():
+    """Valida se o nível COMMAND é identificado corretamente."""
+    command_key = os.getenv("API_KEY_COMMAND")
+    headers = {"X-API-KEY": command_key}
+    
+    payload = {
+        "origin": {"lat": -15.7942, "lon": -47.8822},
+        "target": {"lat": -15.8010, "lon": -47.8920}
+    }
+    
+    response = client.post("/calculate", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["role_access"] == "COMMAND"
