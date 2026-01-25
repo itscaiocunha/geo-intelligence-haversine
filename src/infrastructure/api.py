@@ -2,14 +2,13 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-
-# Immediate loading of environment variables
-load_dotenv()
-
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
-from src.engine import Coordinate, HaversineEngine, logger
+
+load_dotenv()
+from src.application.use_cases import GeoIntelligenceService
+from src.infrastructure.logger_config import logger
 
 # Security Settings
 API_KEY_NAME = "X-API-KEY"
@@ -71,30 +70,13 @@ async def generate_new_key(
     }
 
 @app.post("/calculate")
-async def calculate_tactical_distance(
-    request: GeoRequest,
-    role: str = Depends(get_api_key)
-):
+async def calculate(request: GeoRequest, role: str = Depends(get_api_key)):
     try:
-        origin_coord = Coordinate(request.origin['lat'], request.origin['lon'])
-        target_coord = Coordinate(request.target['lat'], request.target['lon'])
-        
-        distance = HaversineEngine.calculate_distance(origin_coord, target_coord)
-        within = HaversineEngine.is_within_radius(origin_coord, target_coord, request.radius)
-        
-        return {
-            "status": "success",
-            "role_access": role,
-            "data": {
-                "distance_km": round(distance, 2),
-                "alert": within,
-                "message": "Target within perimeter!" if within else "Target clear."
-            }
-        }
+        # A API apenas repassa a missão para o Serviço de Aplicação
+        result = GeoIntelligenceService.process_calculation(
+            request.origin, request.target, request.radius
+        )
+        return {"status": "success", "role_access": role, "data": result}
     except Exception as e:
-        logger.error(f"API Error: {str(e)}")
+        logger.error(f"Erro tático: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/health")
-async def health_check():
-    return {"status": "operational", "system": "GEO-INT Engine"}

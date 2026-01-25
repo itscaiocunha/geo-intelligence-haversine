@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 8000
 
 # Command to start the API in operational mode
-CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.infrastructure.api:app", "--host", "0.0.0.0", "--port", "8000"]

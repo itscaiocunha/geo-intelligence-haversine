@@ -1,7 +1,7 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
-from src.api import app
+from src.infrastructure.api import app
 from dotenv import load_dotenv
 
 load_dotenv()

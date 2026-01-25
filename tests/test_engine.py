@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from src.engine import Coordinate, HaversineEngine
+from src.domain.entities import Coordinate, HaversineEngine
 
 def test_distance_between_same_points():
     """It ensures that the distance to the same point is zero."""
