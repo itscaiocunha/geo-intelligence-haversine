@@ -1,10 +1,12 @@
 import os
 import secrets
+
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security.api_key import APIKeyHeader
-from pydantic import BaseModel
+from fastapi import UploadFile, File, Form
 
 load_dotenv()
 from src.application.use_cases import GeoIntelligenceService
@@ -72,7 +74,6 @@ async def generate_new_key(
 @app.post("/calculate")
 async def calculate(request: GeoRequest, role: str = Depends(get_api_key)):
     try:
-        # A API apenas repassa a missão para o Serviço de Aplicação
         result = GeoIntelligenceService.process_calculation(
             request.origin, request.target, request.radius
         )
@@ -80,3 +81,29 @@ async def calculate(request: GeoRequest, role: str = Depends(get_api_key)):
     except Exception as e:
         logger.error(f"Erro tático: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    
+@app.post("/calculate/batch")
+async def calculate_batch(
+    lat: float = Form(...),
+    lon: float = Form(...),
+    radius: float = Form(5.0),
+    file: UploadFile = File(...),
+    role: str = Depends(get_api_key)
+):
+    
+    try:
+        content = await file.read()
+        csv_text = content.decode('utf-8')
+        
+        origin = {"lat": lat, "lon": lon}
+        batch_result = GeoIntelligenceService.process_batch_csv(csv_text, origin, radius, role)
+        
+        logger.info(f"Batch processed by {role}. Targets: {batch_result['summary']['total_processed']}")
+        
+        return {
+            "status": "success",
+            "mission_report": batch_result
+        }
+    except Exception as e:
+        logger.error(f"Failed to process batch: {str(e)}")
+        raise HTTPException(status_code=400, detail="Error processing CSV file.")
