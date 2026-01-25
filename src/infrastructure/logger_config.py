@@ -14,7 +14,7 @@ if not os.path.exists(LOG_DIR):
 log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [GEO-INT] - %(message)s')
 
 # Handler for file (Persistence)
-file_handler = logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8')
+file_handler = logging.FileHandler(LOG_FILE, mode='a', encoding='utf-8', delay=False)
 file_handler.setFormatter(log_formatter)
 
 # Handler for console (Direct visualization in Docker Logs)
