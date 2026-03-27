@@ -27,6 +27,7 @@ It provides secure API-key access, unitary and batch geospatial analysis, and au
 This project implements a tactical geospatial engine centered on the Haversine formula.
 
 Main operational goals:
+
 - Compute distances between two coordinates with validation safeguards.
 - Detect radius/perimeter violations for rapid proximity alerts.
 - Process multiple targets from CSV in a single mission-oriented request.
@@ -138,6 +139,7 @@ source .venv/bin/activate
 ### 2) Install dependencies
 
 This repository expects typical runtime dependencies:
+
 - `fastapi`
 - `uvicorn`
 - `pydantic`
@@ -210,7 +212,7 @@ Request body:
 ```json
 {
   "origin": { "lat": -15.7942, "lon": -47.8822 },
-  "target": { "lat": -15.8010, "lon": -47.8920 },
+  "target": { "lat": -15.801, "lon": -47.892 },
   "radius": 5.0
 }
 ```
@@ -231,6 +233,7 @@ curl -X POST "http://localhost:8000/calculate" \
 - **Content-Type:** `multipart/form-data`
 
 Form fields:
+
 - `lat` (float): origin latitude
 - `lon` (float): origin longitude
 - `radius` (float): alert radius in kilometers
@@ -258,6 +261,7 @@ Target_Bravo,-23.5600,-46.6400
 ```
 
 Notes:
+
 - Invalid rows are skipped.
 - `name` is optional in runtime handling; fallback label is used if absent.
 - Distances are returned in kilometers and rounded to 2 decimals.
@@ -269,11 +273,13 @@ The service logs tactical events to:
 - `data/operation.log`
 
 Logged operation types include:
+
 - `CALC_UNITARY`
 - `BATCH_OPERATION`
 - `KEY_GEN`
 
 `/admin/stats` parses this log and builds:
+
 - global operation counters
 - violation totals
 - per-agent activity details
@@ -287,6 +293,7 @@ pytest
 ```
 
 Test layout:
+
 - `tests/test_engine.py`: geospatial domain and invariants.
 - `tests/test_api.py`: authentication and endpoint behavior.
 
@@ -306,15 +313,6 @@ Test layout:
 
 - **Docker build fails on missing dependencies file**  
   The current `Dockerfile` references `requirements.txt`, which is not currently present in this repository.
-
-## Known Gaps and Next Improvements
-
-- Add a versioned `requirements.txt` or `pyproject.toml` for deterministic installs.
-- Provide `.env.example` for first-run onboarding.
-- Align API tests with current response contracts (`tests/test_api.py` vs current endpoint payloads).
-- Replace in-memory API key storage with persistent secure storage for production.
-- Add rate limiting and key revocation endpoints.
-- Add CI pipeline (lint, test, image build, security scan).
 
 ## License
 
